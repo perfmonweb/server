@@ -232,6 +232,53 @@ class Memory:
         assert device_total_mem,  "Unable to obtain total memory from deivce."
         self._total_mem = device_total_mem
 
+    def _web_gather_mem_usage(self):
+        """Collects application and device memory usage.
+
+        Collects application usage from the dumpsys adb shell command and
+        collects device usage from the top adb shell command.
+
+        If no matches are found for the application or device usage,
+        an error message will be logged and the program will exit.
+        """
+        # ADB command to obtain the memory information for the targeted package id.
+        cmd = ("adb", "shell", "dumpsys", "meminfo", self._package_name)
+        dumpsys_output = subprocess.check_output(cmd).decode()
+
+        # Finds app usage from dumpsys, checks P first and fallsback to R.
+        app_usage_match = self._re_dumpsys.search(dumpsys_output)
+        if not app_usage_match:
+            app_usage_match = self._re_dumpsys.search(dumpsys_output)
+            if not app_usage_match:
+                return ((f"Regex did not match this output:\n"
+                         f"{dumpsys_output}\n"
+                         "_get_mem_usage: failed to parse dumpsys meminfo "
+                         f"{self._package_name}"))
+
+        app_usage = app_usage_match.group("total")
+        if not app_usage:
+            return "App memory value is not recorded."
+
+        # Finds device usage from top.
+        top_output = subprocess.check_output(_ADB_SHELL_TOP
+                                             .split()).strip().decode()
+        device_match = self._re_top_mem.search(top_output)
+        if not device_match:
+            return (f"Regex (device): unable to find the pattern"
+                    f" matching '{self._re_top_mem}'")
+
+        device_usage = device_match.group("used")
+        if not device_usage:
+            return "Device memory value is not recorded."
+
+        app_usage = float(app_usage) * _KIB_TO_MIB
+        device_usage = float(device_usage) * _KIB_TO_MIB
+        usage = {
+            "app": app_usage,
+            "device": device_usage
+        }
+        return usage
+
     def _gather_mem_usage(self) -> None:
         """Collects application and device memory usage.
 

@@ -146,6 +146,53 @@ class CPU:
             logging.error("Please check your ADB connection.")
             sys.exit(1)
 
+    def _web_gather_cpu_usage(self):
+        """Stores the percentage of CPU used by the application and the
+        device.
+
+        Stores CPU usage in the following properties:
+            _app_usage
+            _device_usage
+                Calculated as:
+                    (MAX_CPU_AVAILABLE(400%)-IDLE_CPU_USAGE(322%)
+            _app_values
+            _device_values
+        """
+
+        top_output = subprocess.check_output(
+            _ADB_SHELL_TOP.split()).strip().decode()
+
+        app_matches = self._re_app.search(top_output)
+        if not app_matches:
+            return (f"\nRegex: Match for {self._package_name}"
+                    " not found in top output")
+
+        app_cpu = app_matches.group("cpu")
+        if not app_cpu:
+            return "Application CPU usage values are not recorded."
+
+        self._app_usage = float(app_cpu)
+
+        # Captures regex group(line) containing the CPU idle usage info.
+        cpu_matches = self._re_cpu.search(top_output)
+        if not cpu_matches:
+            return ("\nRegex: Match for (percentage)idle cpu usage not "
+                    "found in top output")
+
+        idle_cpu = float(cpu_matches.group("idle"))
+        self._max_cpu = float(cpu_matches.group("cpu"))
+
+        if not idle_cpu:
+            return "CPU idle values are not recorded."
+        if not self._max_cpu:
+            return "CPU max value is not recorded."
+        self._device_usage = self._max_cpu - idle_cpu
+        usages = {
+            "app": self._app_usage,
+            "device": self._device_usage
+        }
+        return usages
+
     def _gather_cpu_usage(self) -> None:
         """Stores the percentage of CPU used by the application and the
         device.

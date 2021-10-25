@@ -4,6 +4,8 @@ from flask.json import jsonify
 from flask_cors import CORS
 from adbm import ADB_Modules
 from fps import FPS
+from cpu import CPU
+from memory import Memory
 from utils import Utils
 
 app = Flask(__name__)
@@ -29,6 +31,20 @@ def getfps(package_name):
         return jsonify(str(avg))
     else:
         return fps.error
+
+
+@app.route('/cpu/<package_name>', methods=['GET', 'POST'])
+def getcpu(package_name):
+    cpu = CPU(package_id=package_name)
+    output = cpu._web_gather_cpu_usage()
+    return output
+
+
+@app.route('/mem/<package_name>', methods=['GET', 'POST'])
+def getmem(package_name):
+    mem = Memory(package_name=package_name, require_full_name=False)
+    output = mem._web_gather_mem_usage()
+    return output
 
 
 @app.route('/checkadb', methods=['GET'])
