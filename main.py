@@ -20,14 +20,11 @@ def hello():
 @app.route('/fps/<package_name>', methods=['GET', 'POST'])
 def getfps(package_name):
     fps = FPS(package_name=package_name, duration=60, dumpfile="text",
-              print_latency=False, require_full_name=True)
-    frames = fps._get_recent_frames()
+              print_latency=False, require_full_name=False)
+    
+    stats = fps.get_stats([], True)  # Frameless, no frames given, possible error when getting frames
     if not fps.error:
-        if len(frames) < 3:
-            return
-        total = len(frames) - 1
-        dt = (frames[-1].vsync - frames[0].vsync) / 1000000000
-        avg = total / dt
+        avg = stats['avg']
         return jsonify(str(avg))
     else:
         return fps.error
@@ -36,8 +33,11 @@ def getfps(package_name):
 @app.route('/cpu/<package_name>', methods=['GET', 'POST'])
 def getcpu(package_name):
     cpu = CPU(package_id=package_name)
-    output = cpu._web_gather_cpu_usage()
-    return output
+    stats = cpu._web_gather_cpu_usage()
+    if cpu.error:
+        error = cpu.get_error()
+        return {'error': error}
+    return stats
 
 
 @app.route('/mem/<package_name>', methods=['GET', 'POST'])
