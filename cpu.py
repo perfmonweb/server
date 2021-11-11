@@ -97,6 +97,9 @@ class CPU:
         # The average percentage of CPU used by the device.
         self._mean_device_usage = None
 
+        # The error message.
+        self.error = ''
+
         # TODO(danduri@): Validate whether the "top" command is valid for
         # different android versions.
         # "adb shell top -bn1" output:
@@ -145,6 +148,7 @@ class CPU:
         except subprocess.CalledProcessError:
             logging.error("Please check your ADB connection.")
             sys.exit(1)
+        logging.error('Test init CPUED')
 
     def _web_gather_cpu_usage(self):
         """Stores the percentage of CPU used by the application and the
@@ -158,42 +162,22 @@ class CPU:
             _app_values
             _device_values
         """
-
-        top_output = subprocess.check_output(
-            _ADB_SHELL_TOP.split()).strip().decode()
-
-        app_matches = self._re_app.search(top_output)
-        if not app_matches:
-            return (f"\nRegex: Match for {self._package_name}"
-                    " not found in top output")
-
-        app_cpu = app_matches.group("cpu")
-        if not app_cpu:
-            return "Application CPU usage values are not recorded."
-
-        self._app_usage = float(app_cpu)
-
-        # Captures regex group(line) containing the CPU idle usage info.
-        cpu_matches = self._re_cpu.search(top_output)
-        if not cpu_matches:
-            return ("\nRegex: Match for (percentage)idle cpu usage not "
-                    "found in top output")
-
-        idle_cpu = float(cpu_matches.group("idle"))
-        self._max_cpu = float(cpu_matches.group("cpu"))
-
-        if not idle_cpu:
-            return "CPU idle values are not recorded."
-        if not self._max_cpu:
-            return "CPU max value is not recorded."
-        self._device_usage = self._max_cpu - idle_cpu
-        usages = {
-            "app": self._app_usage,
-            "device": self._device_usage
+        stats = {
+            "app": 0,
+            "device": 0
         }
-        return usages
+        
+        if self._gather_cpu_usage():
+            stats['app'] = self._app_values[-1]
+            stats['device'] = self._device_values[-1]
+        return stats
 
-    def _gather_cpu_usage(self) -> None:
+    def get_error(self):
+        msg = self.error
+        self.error = ""
+        return msg
+
+    def _gather_cpu_usage(self, cmdLine=True) -> None:
         """Stores the percentage of CPU used by the application and the
         device.
 
@@ -211,31 +195,52 @@ class CPU:
 
         app_matches = self._re_app.search(top_output)
         if not app_matches:
-            logging.error(f"\nRegex: Match for {self._package_name}"
+            msg = (f"\nRegex: Match for {self._package_name}"
                           " not found in top output")
-            sys.exit(1)
+            self.error = msg
+            logging.error(msg)
+            if cmdLine:
+                sys.exit(1)
+            return False
 
         app_cpu = app_matches.group("cpu")
-        assert app_cpu, "Application CPU usage values are not recorded."
-        self._app_usage = float(app_cpu)
-
+        if not app_cpu:
+            self.error = "Application CPU usage values are not recorded."
+            logging.error("Application CPU usage values are not recorded.")
+            if cmdLine:
+                sys.exit(1)
+            return False
+        
         # Captures regex group(line) containing the CPU idle usage info.
         cpu_matches = self._re_cpu.search(top_output)
         if not cpu_matches:
-            logging.error("\nRegex: Match for (percentage)idle cpu usage not "
+            msg = ("\nRegex: Match for (percentage)idle cpu usage not "
                           "found in top output")
-            sys.exit(1)
+            self.error = msg
+            logging.error(msg)
+            if cmdLine:
+                sys.exit(1)
+            return False
 
         idle_cpu = float(cpu_matches.group("idle"))
-        self._max_cpu = float(cpu_matches.group("cpu"))
+        max_cpu = float(cpu_matches.group("cpu"))
+        
+        if not idle_cpu or not max_cpu:
+            self.error = "CPU idle/ max values are not recorded."
+            logging.error("CPU idle/ max values are not recorded.")
+            sys.exit(1)
+            return False
 
-        assert idle_cpu, "CPU idle values are not recorded."
-        assert self._max_cpu, "CPU max value is not recorded."
-        self._device_usage = self._max_cpu - idle_cpu
+        # Only update values if both app and device were captured.
+        self._max_cpu = max_cpu
+        self._device_usage = max_cpu - idle_cpu
+        self._app_usage = float(app_cpu)
 
         # Stores app and device usage for later calculations.
         self._app_values.append(self._app_usage)
         self._device_values.append(self._device_usage)
+        return True
+        
 
     def _update_cpu_calculations(self) -> None:
         """Updates the mean of the application and device CPU usage recorded

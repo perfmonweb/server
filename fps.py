@@ -320,29 +320,53 @@ class FPS:
                 Frame(draw=entries[0], vsync=entries[1], submit=entries[2]))
         return frames
 
+    def get_stats(self, frames: List[Frame], frameless=False) -> dict:
+        ''' Calculates FPS stats. 
+        Args:
+            frameless: A bool to indicate if frames are provided or not.
+        Returns:
+            dict: A dict storing the fps stats calculated.
+        '''
+        # It might be possible that 'frames' is almost empty (e.g. SF stats were
+        # recently cleared). When that's the case, don't print anything.
+        # Three is the minimum required to generate two values needed for stdev.
+        if frameless:
+            frames = self._get_recent_frames() 
+         
+        if len(frames) < 3:
+            return {
+                'avg': 0,
+                'total': 0,
+                'dt': 0,
+                'latencies': []
+            }
+            
+        total = len(frames) - 1
+        dt = (frames[-1].vsync - frames[0].vsync) / 1000000000
+        avg = total / dt
+        return {
+            'avg': avg,
+            'total': total,
+            'dt': dt,
+            'latencies': [(f.submit-f.draw) / 1000000 for f in frames]
+        }
+
     def print_stats(self, frames: List[Frame]) -> None:
         """
         Prints the stats of the list of Frames.
 
         Args:
             frames: List of latest 127 frames.
-        """
-
-        # It might be possible that 'frames' is almost empty (e.g. SF stats were
-        # recently cleared). When that's the case, don't print anything.
-        # Three is the minimum required to generate two values needed for stdev.
-        if len(frames) < 3:
-            return
-        total = len(frames) - 1
-        dt = (frames[-1].vsync - frames[0].vsync) / 1000000000
-        avg = total / dt
-
+        """ 
+        
         # Line overwrites itself with '\r'.
+        stats = self.get_stats(frames)
+        avg = stats['avg']
         fps_avg = f'\r- FPS avg={avg:.2f} '
         latency_str = ''
         if self._print_latency:
             # Store latencies in milliseconds.
-            latencies = [(f.submit-f.draw) / 1000000 for f in frames]
+            latencies = stats['latencies']
             latency_str = ('/ LATENCY (ms) '
                            f'mean={statistics.mean(latencies):.2f}, '
                            f'stdev={statistics.stdev(latencies):.2f}, '
